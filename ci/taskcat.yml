@@ -1,0 +1,13 @@
+global:
+  owner: test@example.com
+  qsname: cfn-pwm
+  regions:
+    - us-east-1
+  reporting: true
+tests:
+  standalone-sns:
+    parameter_input: parameters-sns.json
+    template_file: pwm.sns.element.json
+  standalone-elb:
+    parameter_input: parameters-elb.json
+    template_file: pwm.elb.element.json

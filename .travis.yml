@@ -1,0 +1,29 @@
+language: python
+python:
+  - "3.6"
+git:
+  depth: 1
+
+env:
+  global:
+    - FIND_JSON="find $TRAVIS_BUILD_DIR -name '*.json' -type f -print0"
+    - XARGS="xargs -0 -n1 -I {} -t"
+
+stages:
+  - lint
+
+jobs:
+  include:
+    - stage: lint
+      name: Cloudformation Lint
+      install:
+        - pip install cfn-lint
+      script:
+        - cfn-lint templates/*
+    - stage: lint
+      name: JSON Syntax Verification
+      script: eval $FIND_JSON | $XARGS jq --exit-status . {} > /dev/null
+    - stage: lint
+      name: JSON Lint/Format Verification
+      script: eval $FIND_JSON | $XARGS bash -c 'cmp {} <(jq --indent 4 -S . {})'
+
