@@ -1,297 +1,311 @@
 {
-	"AWSTemplateFormatVersion": "2010-09-09",
-	"Conditions": {
-		"UseACM": {
-			"Fn::Equals": [{
-					"Ref": "SslCertificateService"
-				},
-				"ACM"
-			]
-		},
-		"UseELB": {
-			"Fn::Equals": [{
-					"Ref": "UseELB"
-				},
-				"true"
-			]
-		}
-	},
-	"Description": "Creates a public ELB using HTTPS on port 443, a healthcheck for PWM, and two security groups",
-	"Outputs": {
-		"LoadBalancerDns": {
-			"Description": "DNS name for the PWM ALB",
-			"Value": {
-				"Fn::GetAtt": [
-					"ALB",
-					"DNSName"
-				]
-			}
-		},
-		"LoadBalancerName": {
-			"Description": "Name of the PWM Application Load Balancer",
-			"Value": {
-				"Ref": "ALB"
-			}
-		},
-		"PWMElbSecurityGroupId": {
-			"Condition": "UseELB",
-			"Description": "Security Group ID for the PWM Elastic Load Balancer",
-			"Value": {
-				"Ref": "PWMElbSecurityGroup"
-			}
-		},
-		"PWMSecurityGroupId": {
-			"Description": "Security Group ID for the PWM instances",
-			"Value": {
-				"Ref": "PWMSecurityGroup"
-			}
-		},
-		"TargetGroupName": {
-			"Description": "Name of the PWM ALB Target Group",
-			"Value": {
-				"Ref": "ALBTargetGroup"
-			}
-		}
-	},
-	"Parameters": {
-		"PublicSubnetIDs": {
-			"Description": "A list of Public subnet IDs to attach to the load balancer.",
-			"Type": "List<AWS::EC2::Subnet::Id>"
-		},
-		"SslCertificateName": {
-			"Description": "The name (for IAM) or identifier (for ACM) of the SSL certificate to associate with the ALB. The cert must already exist in the service.",
-			"Type": "String"
-		},
-		"SslCertificateService": {
-			"AllowedValues": [
-				"ACM",
-				"IAM"
-			],
-			"Default": "ACM",
-			"Description": "The service hosting the SSL certificate. Must be ACM or IAM.",
-			"Type": "String"
-		},
-		"UseELB": {
-			"AllowedValues": [
-				"false",
-				"true"
-			],
-			"Default": "true",
-			"Description": "Set to true if using an ELB in front of PWM; otherwise set to false",
-			"Type": "String"
-		},
-		"VPC": {
-			"Description": "VPC ID",
-			"Type": "AWS::EC2::VPC::Id"
-		}
-	},
-	"Resources": {
-		"ALB": {
-			"Properties": {
-				"Scheme": "internet-facing",
-				"SecurityGroups": [{
-					"Fn::If": [
-						"UseELB",
-						{
-							"Ref": "PWMElbSecurityGroup"
-						},
-						{
-							"Ref": "AWS::NoValue"
-						}
-					]
-				}],
-				"Subnets": {
-					"Ref": "PublicSubnetIDs"
-				},
-				"Tags": [{
-					"Key": "Name",
-					"Value": {
-						"Fn::Join": [
-							"",
-							[
-								"pwm-",
-								{
-									"Ref": "AWS::StackName"
-								}
-							]
-						]
-					}
-				}]
-			},
-			"Type": "AWS::ElasticLoadBalancingV2::LoadBalancer"
-		},
-		"ALBListeners": {
-			"Properties": {
-				"Certificates": [{
-					"CertificateArn": {
-						"Fn::If": [
-							"UseACM",
-							{
-								"Fn::Join": [
-									":",
-									[
-										"arn:aws:acm",
-										{
-											"Ref": "AWS::Region"
-										},
-										{
-											"Ref": "AWS::AccountId"
-										},
-										{
-											"Fn::Join": [
-												"",
-												[
-													"certificate/",
-													{
-														"Ref": "SslCertificateName"
-													}
-												]
-											]
-										}
-									]
-								]
-							},
-							{
-								"Fn::Join": [
-									"",
-									[
-										"arn:aws:iam::",
-										{
-											"Ref": "AWS::AccountId"
-										},
-										":server-certificate/",
-										{
-											"Ref": "SslCertificateName"
-										}
-									]
-								]
-							}
-						]
-					}
-				}],
-				"DefaultActions": [{
-					"TargetGroupArn": {
-						"Ref": "ALBTargetGroup"
-					},
-					"Type": "forward"
-				}],
-				"LoadBalancerArn": {
-					"Ref": "ALB"
-				},
-				"Port": 443,
-				"Protocol": "HTTPS"
-			},
-			"Type": "AWS::ElasticLoadBalancingV2::Listener"
-		},
-		"ElbToPWMEgressTcp80": {
-			"Condition": "UseELB",
-			"Properties": {
-				"DestinationSecurityGroupId": {
-					"Ref": "PWMSecurityGroup"
-				},
-				"FromPort": 80,
-				"GroupId": {
-					"Ref": "PWMElbSecurityGroup"
-				},
-				"IpProtocol": "tcp",
-				"ToPort": 80
-			},
-			"Type": "AWS::EC2::SecurityGroupEgress"
-		},
-		"ElbToPWMIngressTcp80": {
-			"Condition": "UseELB",
-			"Properties": {
-				"FromPort": 80,
-				"GroupId": {
-					"Ref": "PWMSecurityGroup"
-				},
-				"IpProtocol": "tcp",
-				"SourceSecurityGroupId": {
-					"Ref": "PWMElbSecurityGroup"
-				},
-				"ToPort": 80
-			},
-			"Type": "AWS::EC2::SecurityGroupIngress"
-		},
-		"PublicToElbIngressTcp443": {
-			"Condition": "UseELB",
-			"Properties": {
-				"CidrIp": "0.0.0.0/0",
-				"FromPort": 443,
-				"GroupId": {
-					"Ref": "PWMElbSecurityGroup"
-				},
-				"IpProtocol": "tcp",
-				"ToPort": 443
-			},
-			"Type": "AWS::EC2::SecurityGroupIngress"
-		},
-		"PWMElbSecurityGroup": {
-			"Condition": "UseELB",
-			"Properties": {
-				"GroupDescription": "Enable PWM ELB access from the Internet",
-				"Tags": [{
-					"Key": "Name",
-					"Value": {
-						"Fn::Join": [
-							"",
-							[
-								"pwm-elb-",
-								{
-									"Ref": "AWS::StackName"
-								}
-							]
-						]
-					}
-				}],
-				"VpcId": {
-					"Ref": "VPC"
-				}
-			},
-			"Type": "AWS::EC2::SecurityGroup"
-		},
-		"PWMSecurityGroup": {
-			"Properties": {
-				"GroupDescription": "Enable PWM access from ELB",
-				"Tags": [{
-					"Key": "Name",
-					"Value": {
-						"Fn::Join": [
-							"",
-							[
-								"pwm-",
-								{
-									"Ref": "AWS::StackName"
-								}
-							]
-						]
-					}
-				}],
-				"VpcId": {
-					"Ref": "VPC"
-				}
-			},
-			"Type": "AWS::EC2::SecurityGroup"
-		},
-		"ALBTargetGroup": {
-			"Properties": {
-				"HealthCheckIntervalSeconds": 30,
-				"HealthCheckPath": "/",
-				"HealthCheckPort": "80",
-				"HealthCheckProtocol": "HTTP",
-				"HealthCheckTimeoutSeconds": 5,
-				"HealthyThresholdCount": 5,
-				"Matcher": {
-					"HttpCode": "302"
-				},
-				"Port": 80,
-				"Protocol": "HTTP",
-				"UnhealthyThresholdCount": 10,
-				"VpcId": {
-					"Ref": "VPC"
-				}
-			},
-			"Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
-		}
-	}
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Conditions": {
+        "UseACM": {
+            "Fn::Equals": [
+                {
+                    "Ref": "SslCertificateService"
+                },
+                "ACM"
+            ]
+        },
+        "UseELB": {
+            "Fn::Equals": [
+                {
+                    "Ref": "UseELB"
+                },
+                "true"
+            ]
+        }
+    },
+    "Description": "Creates a public ELB using HTTPS on port 443, a healthcheck for PWM, and two security groups",
+    "Outputs": {
+        "LoadBalancerDns": {
+            "Description": "DNS name for the PWM ALB",
+            "Value": {
+                "Fn::GetAtt": [
+                    "ALB",
+                    "DNSName"
+                ]
+            }
+        },
+        "LoadBalancerName": {
+            "Description": "Name of the PWM Application Load Balancer",
+            "Value": {
+                "Ref": "ALB"
+            }
+        },
+        "PWMElbSecurityGroupId": {
+            "Condition": "UseELB",
+            "Description": "Security Group ID for the PWM Elastic Load Balancer",
+            "Value": {
+                "Ref": "PWMElbSecurityGroup"
+            }
+        },
+        "PWMSecurityGroupId": {
+            "Description": "Security Group ID for the PWM instances",
+            "Value": {
+                "Ref": "PWMSecurityGroup"
+            }
+        },
+        "TargetGroupName": {
+            "Description": "Name of the PWM ALB Target Group",
+            "Value": {
+                "Ref": "ALBTargetGroup"
+            }
+        }
+    },
+    "Parameters": {
+        "PublicSubnetIDs": {
+            "Description": "A list of Public subnet IDs to attach to the load balancer.",
+            "Type": "List<AWS::EC2::Subnet::Id>"
+        },
+        "SslCertificateName": {
+            "Description": "The name (for IAM) or identifier (for ACM) of the SSL certificate to associate with the ALB. The cert must already exist in the service.",
+            "Type": "String"
+        },
+        "SslCertificateService": {
+            "AllowedValues": [
+                "ACM",
+                "IAM"
+            ],
+            "Default": "ACM",
+            "Description": "The service hosting the SSL certificate. Must be ACM or IAM.",
+            "Type": "String"
+        },
+        "UseELB": {
+            "AllowedValues": [
+                "false",
+                "true"
+            ],
+            "Default": "true",
+            "Description": "Set to true if using an ELB in front of PWM; otherwise set to false",
+            "Type": "String"
+        },
+        "VPC": {
+            "Description": "VPC ID",
+            "Type": "AWS::EC2::VPC::Id"
+        }
+    },
+    "Resources": {
+        "ALB": {
+            "Properties": {
+                "Scheme": "internet-facing",
+                "SecurityGroups": [
+                    {
+                        "Fn::If": [
+                            "UseELB",
+                            {
+                                "Ref": "PWMElbSecurityGroup"
+                            },
+                            {
+                                "Ref": "AWS::NoValue"
+                            }
+                        ]
+                    }
+                ],
+                "Subnets": {
+                    "Ref": "PublicSubnetIDs"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "pwm-",
+                                    {
+                                        "Ref": "AWS::StackName"
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                ]
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer"
+        },
+        "ALBListeners": {
+            "Properties": {
+                "Certificates": [
+                    {
+                        "CertificateArn": {
+                            "Fn::If": [
+                                "UseACM",
+                                {
+                                    "Fn::Join": [
+                                        ":",
+                                        [
+                                            "arn:aws:acm",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            },
+                                            {
+                                                "Fn::Join": [
+                                                    "",
+                                                    [
+                                                        "certificate/",
+                                                        {
+                                                            "Ref": "SslCertificateName"
+                                                        }
+                                                    ]
+                                                ]
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:iam::",
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            },
+                                            ":server-certificate/",
+                                            {
+                                                "Ref": "SslCertificateName"
+                                            }
+                                        ]
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "DefaultActions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "ALBTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "LoadBalancerArn": {
+                    "Ref": "ALB"
+                },
+                "Port": 443,
+                "Protocol": "HTTPS"
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::Listener"
+        },
+        "ALBTargetGroup": {
+            "Properties": {
+                "HealthCheckIntervalSeconds": 30,
+                "HealthCheckPath": "/",
+                "HealthCheckPort": "80",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": 5,
+                "HealthyThresholdCount": 5,
+                "Matcher": {
+                    "HttpCode": "302"
+                },
+                "Port": 80,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": 10,
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        "ElbToPWMEgressTcp80": {
+            "Condition": "UseELB",
+            "Properties": {
+                "DestinationSecurityGroupId": {
+                    "Ref": "PWMSecurityGroup"
+                },
+                "FromPort": 80,
+                "GroupId": {
+                    "Ref": "PWMElbSecurityGroup"
+                },
+                "IpProtocol": "tcp",
+                "ToPort": 80
+            },
+            "Type": "AWS::EC2::SecurityGroupEgress"
+        },
+        "ElbToPWMIngressTcp80": {
+            "Condition": "UseELB",
+            "Properties": {
+                "FromPort": 80,
+                "GroupId": {
+                    "Ref": "PWMSecurityGroup"
+                },
+                "IpProtocol": "tcp",
+                "SourceSecurityGroupId": {
+                    "Ref": "PWMElbSecurityGroup"
+                },
+                "ToPort": 80
+            },
+            "Type": "AWS::EC2::SecurityGroupIngress"
+        },
+        "PWMElbSecurityGroup": {
+            "Condition": "UseELB",
+            "Properties": {
+                "GroupDescription": "Enable PWM ELB access from the Internet",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "pwm-elb-",
+                                    {
+                                        "Ref": "AWS::StackName"
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            },
+            "Type": "AWS::EC2::SecurityGroup"
+        },
+        "PWMSecurityGroup": {
+            "Properties": {
+                "GroupDescription": "Enable PWM access from ELB",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "pwm-",
+                                    {
+                                        "Ref": "AWS::StackName"
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            },
+            "Type": "AWS::EC2::SecurityGroup"
+        },
+        "PublicToElbIngressTcp443": {
+            "Condition": "UseELB",
+            "Properties": {
+                "CidrIp": "0.0.0.0/0",
+                "FromPort": 443,
+                "GroupId": {
+                    "Ref": "PWMElbSecurityGroup"
+                },
+                "IpProtocol": "tcp",
+                "ToPort": 443
+            },
+            "Type": "AWS::EC2::SecurityGroupIngress"
+        }
+    }
 }
