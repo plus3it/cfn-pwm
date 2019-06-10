@@ -1,0 +1,8 @@
+templates:
+- templates/*
+include_checks:
+- I
+ignore_checks:
+- E1029
+- I1022
+- I3011

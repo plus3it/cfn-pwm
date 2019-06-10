@@ -1,299 +1,302 @@
 {
-	"AWSTemplateFormatVersion": "2010-09-09",
-	"Description": "This template creates an instance of PWM for account management, fronted by an Application Load Balancer.",
-	"Metadata": {
-		"AWS::CloudFormation::Interface": {
-			"ParameterGroups": [{
-					"Label": {
-						"default": "Network Configuration"
-					},
-					"Parameters": [
-						"VPC",
-						"PrivateSubnetIDs",
-						"PublicSubnetIDs"
-					]
-				},
-				{
-					"Label": {
-						"default": "EC2 Configuration"
-					},
-					"Parameters": [
-						"AdminIAMGroup",
-						"ALBSslCertificateName",
-						"ALBSslCertificateService",
-						"AmiId",
-						"InstanceType",
-						"KeyPairName"
-					]
-				},
-				{
-					"Label": {
-						"default": "AutoScale Configuration"
-					},
-					"Parameters": [
-						"DesiredCapacity",
-						"MaxCapacity",
-						"MinCapacity",
-						"SNSSubscriptionEmail"
-					]
-				},
-				{
-					"Label": {
-						"default": "Application Configuration"
-					},
-					"Parameters": [
-						"ConfigBucketName",
-						"GitHubUsername",
-						"GitHubRepo",
-						"SaltPillarFile"
-					]
-				}
-			]
-		}
-	},
-	"Outputs": {
-		"PWMALBSecurityGroupId": {
-			"Description": "Security Group ID for the PWM Application Load Balancer",
-			"Value": {
-				"Fn::GetAtt": [
-					"PWMALBStack",
-					"Outputs.PWMElbSecurityGroupId"
-				]
-			}
-		},
-		"PWMLoadBalancerDns": {
-			"Description": "DNS name for the PWM ALB",
-			"Value": {
-				"Fn::GetAtt": [
-					"PWMALBStack",
-					"Outputs.LoadBalancerDns"
-				]
-			}
-		},
-		"PWMLoadBalancerName": {
-			"Description": "Name of the PWM Application Load Balancer",
-			"Value": {
-				"Fn::GetAtt": [
-					"PWMALBStack",
-					"Outputs.LoadBalancerName"
-				]
-			}
-		},
-		"PWMSecurityGroupId": {
-			"Description": "Security Group ID for the PWM instances",
-			"Value": {
-				"Fn::GetAtt": [
-					"PWMALBStack",
-					"Outputs.PWMSecurityGroupId"
-				]
-			}
-		}
-	},
-	"Parameters": {
-		"AdminIAMGroup": {
-			"Description": "ID of the IAM group to be granted SSH Admin access to PWM instances",
-			"Type": "String"
-		},
-		"ALBSslCertificateName": {
-			"Description": "The name (for IAM) or identifier (for ACM) of the SSL certificate to associate with the ELB. The cert must already exist in the service.",
-			"Type": "String"
-		},
-		"ALBSslCertificateService": {
-			"AllowedValues": [
-				"ACM",
-				"IAM"
-			],
-			"Default": "ACM",
-			"Description": "The service hosting the SSL certificate. Must be ACM or IAM.",
-			"Type": "String"
-		},
-		"AmiId": {
-			"Description": "AMI ID",
-			"Type": "String"
-		},
-		"DesiredCapacity": {
-			"Default": "1",
-			"Description": "The number of PWM instances the autoscale group will spin up initially",
-			"MinLength": "1",
-			"Type": "String"
-		},
-		"InstanceType": {
-			"AllowedValues": [
-				"t2.micro",
-				"t2.small",
-				"t2.medium",
-				"t2.large",
-				"t2.xlarge",
-				"c4.large",
-				"c4.xlarge",
-				"m4.large",
-				"m4.xlarge"
-			],
-			"Default": "t2.micro",
-			"Description": "Amazon EC2 instance type for the PWM Instances",
-			"Type": "String"
-		},
-		"KeyPairName": {
-			"Description": "Public/private key pairs allow you to securely connect to your instance after it launches",
-			"Type": "AWS::EC2::KeyPair::KeyName"
-		},
-		"MinCapacity": {
-			"Default": "1",
-			"Description": "The minimum number of PWM instances for the autoscale group",
-			"MinLength": "1",
-			"Type": "String"
-		},
-		"MaxCapacity": {
-			"Default": "1",
-			"Description": "The maximum number of PWM instances for the autoscale group",
-			"MinLength": "1",
-			"Type": "String"
-		},
-		"PrivateSubnetIDs": {
-			"Description": "List of Private Subnet IDs where the PWM instances will run. (only select one, load balancing not tested)",
-			"Type": "List<AWS::EC2::Subnet::Id>"
-		},
-		"PublicSubnetIDs": {
-			"Description": "A list of Public subnet IDs to attach to the load balancer.",
-			"Type": "List<AWS::EC2::Subnet::Id>"
-		},
-		"ConfigBucketName": {
-			"Description": "Name of the existing S3 bucket where the PWM config should be pulled and pushed",
-			"Type": "String"
-		},
-		"GitHubUsername": {
-			"Description": "The username for the GitHub repo that will be cloned",
-			"Type": "String"
-		},
-		"GitHubRepo": {
-			"Description": "The GitHub repo that will be cloned",
-			"Type": "String"
-		},
-		"SaltPillarFile": {
-			"Description": "Name of the pillar file that's stored in the S3 config bucket",
-			"Type": "String"
-		},
-		"SNSSubscriptionEmail": {
-			"AllowedPattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$",
-			"Default": "deployer@example.com",
-			"Description": "Email address to which AWS SNS events are sent.",
-			"MinLength": "3",
-			"Type": "String"
-		},
-		"VPC": {
-			"Description": "VPC ID",
-			"Type": "AWS::EC2::VPC::Id"
-		}
-	},
-	"Resources": {
-		"PWMAutoScaleStack": {
-			"Properties": {
-				"Parameters": {
-					"AdminIAMGroup": {
-						"Ref": "AdminIAMGroup"
-					},
-					"AmiId": {
-						"Ref": "AmiId"
-					},
-					"DesiredCapacity": {
-						"Ref": "DesiredCapacity"
-					},
-					"InstanceType": {
-						"Ref": "InstanceType"
-					},
-					"KeyPairName": {
-						"Ref": "KeyPairName"
-					},
-					"MaxCapacity": {
-						"Ref": "MaxCapacity"
-					},
-					"MinCapacity": {
-						"Ref": "MinCapacity"
-					},
-					"PrivateSubnetIDs": {
-						"Fn::Join": [
-							",",
-							{
-								"Ref": "PrivateSubnetIDs"
-							}
-						]
-					},
-					"PWMALBTargetGroupName": {
-						"Fn::GetAtt": [
-							"PWMALBStack",
-							"Outputs.TargetGroupName"
-						]
-					},
-					"PWMSNSTopicARN": {
-						"Fn::GetAtt": [
-							"PWMSNSTopicSubscriptStack",
-							"Outputs.SNSTopicARN"
-						]
-					},
-					"ConfigBucketName": {
-						"Ref": "ConfigBucketName"
-					},
-					"GitHubUsername": {
-						"Ref": "GitHubUsername"
-					},
-					"GitHubRepo": {
-						"Ref": "GitHubRepo"
-					},
-					"SaltPillarFile": {
-						"Ref": "SaltPillarFile"
-					},
-					"SecurityGroupIdPWMInstance": {
-						"Fn::Join": [
-							",",
-							[{
-								"Fn::GetAtt": [
-									"PWMALBStack",
-									"Outputs.PWMSecurityGroupId"
-								]
-							}]
-						]
-					}
-				},
-				"TemplateURL": "./pwm.asg.element.json"
-			},
-			"Type": "AWS::CloudFormation::Stack"
-		},
-		"PWMALBStack": {
-			"Properties": {
-				"Parameters": {
-					"PublicSubnetIDs": {
-						"Fn::Join": [
-							",",
-							{
-								"Ref": "PublicSubnetIDs"
-							}
-						]
-					},
-					"SslCertificateName": {
-						"Ref": "ALBSslCertificateName"
-					},
-					"SslCertificateService": {
-						"Ref": "ALBSslCertificateService"
-					},
-					"UseELB": "true",
-					"VPC": {
-						"Ref": "VPC"
-					}
-				},
-				"TemplateURL": "./pwm.elb.element.json"
-			},
-			"Type": "AWS::CloudFormation::Stack"
-		},
-		"PWMSNSTopicSubscriptStack": {
-			"Properties": {
-				"Parameters": {
-					"SNSSubscriptionEmail": {
-						"Ref": "SNSSubscriptionEmail"
-					}
-				},
-				"TemplateURL": "./pwm.sns.element.json"
-			},
-			"Type": "AWS::CloudFormation::Stack"
-		}
-	}
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "This template creates an instance of PWM for account management, fronted by an Application Load Balancer.",
+    "Metadata": {
+        "AWS::CloudFormation::Interface": {
+            "ParameterGroups": [
+                {
+                    "Label": {
+                        "default": "Network Configuration"
+                    },
+                    "Parameters": [
+                        "VPC",
+                        "PrivateSubnetIDs",
+                        "PublicSubnetIDs"
+                    ]
+                },
+                {
+                    "Label": {
+                        "default": "EC2 Configuration"
+                    },
+                    "Parameters": [
+                        "AdminIAMGroup",
+                        "ALBSslCertificateName",
+                        "ALBSslCertificateService",
+                        "AmiId",
+                        "InstanceType",
+                        "KeyPairName"
+                    ]
+                },
+                {
+                    "Label": {
+                        "default": "AutoScale Configuration"
+                    },
+                    "Parameters": [
+                        "DesiredCapacity",
+                        "MaxCapacity",
+                        "MinCapacity",
+                        "SNSSubscriptionEmail"
+                    ]
+                },
+                {
+                    "Label": {
+                        "default": "Application Configuration"
+                    },
+                    "Parameters": [
+                        "ConfigBucketName",
+                        "GitHubUsername",
+                        "GitHubRepo",
+                        "SaltPillarFile"
+                    ]
+                }
+            ]
+        }
+    },
+    "Outputs": {
+        "PWMALBSecurityGroupId": {
+            "Description": "Security Group ID for the PWM Application Load Balancer",
+            "Value": {
+                "Fn::GetAtt": [
+                    "PWMALBStack",
+                    "Outputs.PWMElbSecurityGroupId"
+                ]
+            }
+        },
+        "PWMLoadBalancerDns": {
+            "Description": "DNS name for the PWM ALB",
+            "Value": {
+                "Fn::GetAtt": [
+                    "PWMALBStack",
+                    "Outputs.LoadBalancerDns"
+                ]
+            }
+        },
+        "PWMLoadBalancerName": {
+            "Description": "Name of the PWM Application Load Balancer",
+            "Value": {
+                "Fn::GetAtt": [
+                    "PWMALBStack",
+                    "Outputs.LoadBalancerName"
+                ]
+            }
+        },
+        "PWMSecurityGroupId": {
+            "Description": "Security Group ID for the PWM instances",
+            "Value": {
+                "Fn::GetAtt": [
+                    "PWMALBStack",
+                    "Outputs.PWMSecurityGroupId"
+                ]
+            }
+        }
+    },
+    "Parameters": {
+        "ALBSslCertificateName": {
+            "Description": "The name (for IAM) or identifier (for ACM) of the SSL certificate to associate with the ELB. The cert must already exist in the service.",
+            "Type": "String"
+        },
+        "ALBSslCertificateService": {
+            "AllowedValues": [
+                "ACM",
+                "IAM"
+            ],
+            "Default": "ACM",
+            "Description": "The service hosting the SSL certificate. Must be ACM or IAM.",
+            "Type": "String"
+        },
+        "AdminIAMGroup": {
+            "Description": "ID of the IAM group to be granted SSH Admin access to PWM instances",
+            "Type": "String"
+        },
+        "AmiId": {
+            "Description": "AMI ID",
+            "Type": "String"
+        },
+        "ConfigBucketName": {
+            "Description": "Name of the existing S3 bucket where the PWM config should be pulled and pushed",
+            "Type": "String"
+        },
+        "DesiredCapacity": {
+            "Default": "1",
+            "Description": "The number of PWM instances the autoscale group will spin up initially",
+            "MinLength": "1",
+            "Type": "String"
+        },
+        "GitHubRepo": {
+            "Description": "The GitHub repo that will be cloned",
+            "Type": "String"
+        },
+        "GitHubUsername": {
+            "Description": "The username for the GitHub repo that will be cloned",
+            "Type": "String"
+        },
+        "InstanceType": {
+            "AllowedValues": [
+                "t2.micro",
+                "t2.small",
+                "t2.medium",
+                "t2.large",
+                "t2.xlarge",
+                "c4.large",
+                "c4.xlarge",
+                "m4.large",
+                "m4.xlarge"
+            ],
+            "Default": "t2.micro",
+            "Description": "Amazon EC2 instance type for the PWM Instances",
+            "Type": "String"
+        },
+        "KeyPairName": {
+            "Description": "Public/private key pairs allow you to securely connect to your instance after it launches",
+            "Type": "AWS::EC2::KeyPair::KeyName"
+        },
+        "MaxCapacity": {
+            "Default": "1",
+            "Description": "The maximum number of PWM instances for the autoscale group",
+            "MinLength": "1",
+            "Type": "String"
+        },
+        "MinCapacity": {
+            "Default": "1",
+            "Description": "The minimum number of PWM instances for the autoscale group",
+            "MinLength": "1",
+            "Type": "String"
+        },
+        "PrivateSubnetIDs": {
+            "Description": "List of Private Subnet IDs where the PWM instances will run. (only select one, load balancing not tested)",
+            "Type": "List<AWS::EC2::Subnet::Id>"
+        },
+        "PublicSubnetIDs": {
+            "Description": "A list of Public subnet IDs to attach to the load balancer.",
+            "Type": "List<AWS::EC2::Subnet::Id>"
+        },
+        "SNSSubscriptionEmail": {
+            "AllowedPattern": "^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$",
+            "Default": "deployer@example.com",
+            "Description": "Email address to which AWS SNS events are sent.",
+            "MinLength": "3",
+            "Type": "String"
+        },
+        "SaltPillarFile": {
+            "Description": "Name of the pillar file that's stored in the S3 config bucket",
+            "Type": "String"
+        },
+        "VPC": {
+            "Description": "VPC ID",
+            "Type": "AWS::EC2::VPC::Id"
+        }
+    },
+    "Resources": {
+        "PWMALBStack": {
+            "Properties": {
+                "Parameters": {
+                    "PublicSubnetIDs": {
+                        "Fn::Join": [
+                            ",",
+                            {
+                                "Ref": "PublicSubnetIDs"
+                            }
+                        ]
+                    },
+                    "SslCertificateName": {
+                        "Ref": "ALBSslCertificateName"
+                    },
+                    "SslCertificateService": {
+                        "Ref": "ALBSslCertificateService"
+                    },
+                    "UseELB": "true",
+                    "VPC": {
+                        "Ref": "VPC"
+                    }
+                },
+                "TemplateURL": "./pwm.elb.element.json"
+            },
+            "Type": "AWS::CloudFormation::Stack"
+        },
+        "PWMAutoScaleStack": {
+            "Properties": {
+                "Parameters": {
+                    "AdminIAMGroup": {
+                        "Ref": "AdminIAMGroup"
+                    },
+                    "AmiId": {
+                        "Ref": "AmiId"
+                    },
+                    "ConfigBucketName": {
+                        "Ref": "ConfigBucketName"
+                    },
+                    "DesiredCapacity": {
+                        "Ref": "DesiredCapacity"
+                    },
+                    "GitHubRepo": {
+                        "Ref": "GitHubRepo"
+                    },
+                    "GitHubUsername": {
+                        "Ref": "GitHubUsername"
+                    },
+                    "InstanceType": {
+                        "Ref": "InstanceType"
+                    },
+                    "KeyPairName": {
+                        "Ref": "KeyPairName"
+                    },
+                    "MaxCapacity": {
+                        "Ref": "MaxCapacity"
+                    },
+                    "MinCapacity": {
+                        "Ref": "MinCapacity"
+                    },
+                    "PWMALBTargetGroupName": {
+                        "Fn::GetAtt": [
+                            "PWMALBStack",
+                            "Outputs.TargetGroupName"
+                        ]
+                    },
+                    "PWMSNSTopicARN": {
+                        "Fn::GetAtt": [
+                            "PWMSNSTopicSubscriptStack",
+                            "Outputs.SNSTopicARN"
+                        ]
+                    },
+                    "PrivateSubnetIDs": {
+                        "Fn::Join": [
+                            ",",
+                            {
+                                "Ref": "PrivateSubnetIDs"
+                            }
+                        ]
+                    },
+                    "SaltPillarFile": {
+                        "Ref": "SaltPillarFile"
+                    },
+                    "SecurityGroupIdPWMInstance": {
+                        "Fn::Join": [
+                            ",",
+                            [
+                                {
+                                    "Fn::GetAtt": [
+                                        "PWMALBStack",
+                                        "Outputs.PWMSecurityGroupId"
+                                    ]
+                                }
+                            ]
+                        ]
+                    }
+                },
+                "TemplateURL": "./pwm.asg.element.json"
+            },
+            "Type": "AWS::CloudFormation::Stack"
+        },
+        "PWMSNSTopicSubscriptStack": {
+            "Properties": {
+                "Parameters": {
+                    "SNSSubscriptionEmail": {
+                        "Ref": "SNSSubscriptionEmail"
+                    }
+                },
+                "TemplateURL": "./pwm.sns.element.json"
+            },
+            "Type": "AWS::CloudFormation::Stack"
+        }
+    }
 }
