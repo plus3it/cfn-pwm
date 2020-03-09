@@ -1,37 +1,18 @@
-# cfn-pwm
+## cfn-pwm
 PWM (https://github.com/pwm-project/pwm) is an open source password self service application for LDAP directories.
 This cloudformation stack creates the infrastructure needed to run PWM behind an application load balancer
 
-# Templates
-## Compound Template
-The root template that forms the basis of the remaining templates
+## Prequisites
+* S3 bucket with the following configuration files
+  * `PwmConfiguration.xml` - the config file used to configure PWM
+  * `PwmConfiguration.xml.sha1` - file with the SHA1 hash of the pwm configruation file
+  * `<pillar_file>.sls` - Name of the pillar file to be used for the salt formula
+  * `pwm18.war` - The Java war file used to deploy PWM
+  * `pwm18.war.sha1` - file with the SHA1 hash of the pwm war file
 
-## ELB Template
-The following elements are created:
-* Application Load Balancer
-  * ALB Listener
-  * ALB Target Group
-  * Security Group
-    * Inbound on TCP/443 from 0.0.0.0/0
-    * Outbound on TCP/80 to PWM security group
-* Security group for PWM EC2 instance
-  * Inbound on TCP/80 from ALB
-  * Outbound on all ports to 0.0.0.0/0
-
-## ASG Template
-The following elements are created:
-* Auto Scaling Group
-  * Launch Config
-* IAM role for EC2 instance
-* IAM instance profile for EC2 instance
-* IAM policy to allow S3 access
-* IAM policy to allow Cloudwatch agent to record metrics
-* IAM policy to allow SSH access to Admin Group
-* IAM policy to allows SSH access to other group
-
-## SNS Template
-The following elements are created:
-* SNS Topic
+## Package CloudFormation Template
+* Packages the local artifacts (local paths) that your AWS CloudFormation template references.
+  * `aws cloudformation package --template-file templates/pwm.compound.json  --s3-bucket <value> > packaged_template.json`
 
 ## Parameters
 * AdminIAMGroup - the IAM group for which to give access to the EC2 instance
@@ -44,11 +25,11 @@ The following elements are created:
 * DesiredCapacity
 * MinCapacity
 * MaxCapacity
-* PrivateSubnetIDs
-* PublicSubnetIDs
-* ConfigBucketName - The S3 bucket to use to grab configuration files
-* GitHubUsername
-* GitHubRepo
+* PrivateSubnetIDs - list of private subnet ids
+* PublicSubnetIDs - list of public subnet ids
+* ConfigBucketName - The S3 bucket to used to grab configuration files
+* GitHubUsername - The github username of the salt formula that is going to be getting deployed
+* GitHubRepo - The repository name of the salt formaula that is going to be getting deployed
 * SaltPillarFile - The name of the pillar file stored in the S3 config bucket (include the '.sls')
 * SNSSubscriptionEmail - The email address that will be used to subscribe to the SNS topic
 * VPC - the VPC for which to deploy the resources
