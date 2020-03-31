@@ -165,12 +165,6 @@
                                             {
                                                 "Ref": "AWS::AccountId"
                                             },
-                                            "log-group:/aws/ec2/lx/${AWS::StackName}:*",
-                                            "\n",
-                                            "arn:aws:logs:*:",
-                                            {
-                                                "Ref": "AWS::AccountId"
-                                            },
                                             "log-group:/aws/ec2/lx/${AWS::StackName}:*"
                                         ]
                                     ]
